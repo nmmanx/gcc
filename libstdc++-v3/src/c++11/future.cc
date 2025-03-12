@@ -25,6 +25,15 @@
 #include <future>
 #include <bits/functexcept.h>
 
+// RATIONALE: adding __attribute__((weak)) to these functions allows redefining
+// them if compiling without exceptions to avoid pulling in exception support
+// and save code size
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
+
 namespace
 {
   struct future_error_category : public std::error_category
@@ -71,7 +80,7 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-  void
+  void AW
   __throw_future_error(int __i __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(future_error(make_error_code(future_errc(__i)))); }
 

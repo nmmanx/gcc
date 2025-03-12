@@ -3022,6 +3022,11 @@ output_one_function_exception_table (int section)
   else
     {
       tt_format = ASM_PREFERRED_EH_DATA_FORMAT (/*code=*/0, /*global=*/1);
+      // This is here for debugging the change to ARM_TARGET2_DWARF_FORMAT
+      // in Miosix processes: when compiling C++ code that throws and catches
+      // exceptions, it should print 0x10 (DW_EH_PE_pcrel) when compiling the
+      // kernel (non-pic) and 0x30 (DW_EH_PE_datarel) when compiling processes
+      //printf("\n\n-- called 0x%x --\n\n",tt_format);
       if (HAVE_AS_LEB128)
 	ASM_GENERATE_INTERNAL_LABEL (ttype_label,
 				     section ? "LLSDATTC" : "LLSDATT",

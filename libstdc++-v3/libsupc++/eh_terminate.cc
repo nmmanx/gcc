@@ -37,6 +37,15 @@ namespace
 }
 #endif
 
+// RATIONALE: adding __attribute__((weak)) to these functions allows redefining
+// them if compiling without exceptions to avoid pulling in exception support
+// and save code size
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
+
 using namespace __cxxabiv1;
 
 void
@@ -51,7 +60,7 @@ __cxxabiv1::__terminate (std::terminate_handler handler) throw ()
     { std::abort (); }
 }
 
-void
+void AW
 std::terminate () throw()
 {
   __terminate (get_terminate ());
@@ -64,7 +73,7 @@ __cxxabiv1::__unexpected (std::unexpected_handler handler)
   std::terminate ();
 }
 
-void
+void AW
 std::unexpected ()
 {
   __unexpected (get_unexpected ());

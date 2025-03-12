@@ -78,12 +78,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   public:
     typedef __native_type* 		native_handle_type;
 
+/*
+ * This patch works together with the one in src/c++11/condition_variable.cc
+ */
+#ifndef _MIOSIX
+    
     condition_variable() noexcept;
     ~condition_variable() noexcept;
+    
+#else //_MIOSIX
+    
+    #ifndef __GTHREAD_COND_INIT
+    #error shouldn't fail
+    #endif
+    // __GTHREAD_COND_INIT is defined in Miosix, nothing to do
+    condition_variable() noexcept = default;
+    // pthread_cond_destroy isn't needed in Miosix, and even the original
+    // libstdc++ code doesnt't handle EBUSY anyway
+    ~condition_variable() noexcept = default;
+    
+#endif //_MIOSIX
 
     condition_variable(const condition_variable&) = delete;
     condition_variable& operator=(const condition_variable&) = delete;
 
+#ifndef _MIOSIX
+    
     void
     notify_one() noexcept;
 
@@ -92,6 +112,31 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     void
     wait(unique_lock<mutex>& __lock) noexcept;
+    
+#else //_MIOSIX
+    
+    void
+    notify_one() noexcept
+    {
+      int __e = __gthread_cond_signal(&_M_cond);
+      if (__e) __throw_system_error(__e);
+    }
+
+    void
+    notify_all() noexcept
+    {
+      int __e = __gthread_cond_broadcast(&_M_cond);
+      if (__e) __throw_system_error(__e);
+    }
+
+    void
+    wait(unique_lock<mutex>& __lock) noexcept
+    {
+      int __e = __gthread_cond_wait(&_M_cond, __lock.mutex()->native_handle());
+      if (__e) std::terminate();
+    }
+    
+#endif //_MIOSIX
 
     template<typename _Predicate>
       void

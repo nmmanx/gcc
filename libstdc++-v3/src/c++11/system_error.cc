@@ -32,6 +32,15 @@
 #include <errno.h>
 #undef __sso_string
 
+// RATIONALE: adding __attribute__((weak)) to these functions allows redefining
+// them if compiling without exceptions to avoid pulling in exception support
+// and save code size
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
+
 namespace
 {
   using std::string;
@@ -331,7 +340,7 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-  void
+  void AW
   __throw_system_error(int __i __attribute__((unused)))
   {
     _GLIBCXX_THROW_OR_ABORT(system_error(error_code(__i, generic_category())));

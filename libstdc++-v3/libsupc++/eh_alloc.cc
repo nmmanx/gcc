@@ -73,6 +73,14 @@ using namespace __cxxabiv1;
 # define EMERGENCY_OBJ_COUNT	4
 #endif
 
+//RATIONALE: reduced emergency buffer for ARM microcontrollers, saves RAM
+#ifdef _MIOSIX
+# undef EMERGENCY_OBJ_SIZE
+# undef EMERGENCY_OBJ_COUNT
+# define EMERGENCY_OBJ_SIZE  160
+# define EMERGENCY_OBJ_COUNT 3
+#endif
+
 namespace __gnu_cxx
 {
   void __freeres();

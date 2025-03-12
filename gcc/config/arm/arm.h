@@ -878,7 +878,12 @@ extern int arm_arch_cmse;
 #define EH_RETURN_STACKADJ_RTX	gen_rtx_REG (SImode, ARM_EH_STACKADJ_REGNUM)
 
 #ifndef ARM_TARGET2_DWARF_FORMAT
-#define ARM_TARGET2_DWARF_FORMAT DW_EH_PE_pcrel
+//TODO: #ifdef _MIOSIX does not work in this context
+//Produce exception unwinding tables that work with Miosix processes
+//see processes-patch.md, section "The problem with unwinding exception tables"
+//we want pcrel as usual for the Miosix kernel, and datarel for processes (pic)
+#define ARM_TARGET2_DWARF_FORMAT (flag_pic ? DW_EH_PE_datarel : DW_EH_PE_pcrel)
+//#define ARM_TARGET2_DWARF_FORMAT DW_EH_PE_pcrel
 #endif
 
 /* ttype entries (the only interesting data references used)

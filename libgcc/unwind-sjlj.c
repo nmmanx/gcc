@@ -91,7 +91,14 @@ typedef struct
   _Unwind_Personality_Fn personality;
 } _Unwind_FrameState;
 
-
+
+// RATIONALE: _Miosix_set_sjlj_ptr and _Miosix_get_sjlj_ptr make
+// exception handling thread-safe even if Miosix does not support TLS
+// NOTE: C++ uses exception support is in eh_globals.cc, is there any code that
+// triggers these to be called? Otherwise we may either keep them if Miosix
+// will support architectures with sjlj exceptions, or even remove this patch
+#ifndef _MIOSIX
+
 /* Manage the chain of registered function contexts.  */
 
 /* Single threaded fallback chain.  */
@@ -162,6 +169,32 @@ _Unwind_SjLj_SetContext (struct SjLj_Function_Context *fc)
 #endif
     fc_static = fc;
 }
+
+#else //_MIOSIX
+
+void _Miosix_set_sjlj_ptr(void* ptr);
+void *_Miosix_get_sjlj_ptr();
+
+void
+_Unwind_SjLj_Register (struct SjLj_Function_Context *fc)
+{
+  fc->prev=_Miosix_get_sjlj_ptr();
+  _Miosix_set_sjlj_ptr(fc);
+}
+
+static inline struct SjLj_Function_Context *
+_Unwind_SjLj_GetContext (void)
+{
+  return _Miosix_get_sjlj_ptr();
+}
+
+static inline void
+_Unwind_SjLj_SetContext (struct SjLj_Function_Context *fc)
+{
+  _Miosix_set_sjlj_ptr(fc);
+}
+
+#endif //_MIOSIX
 
 void
 _Unwind_SjLj_Unregister (struct SjLj_Function_Context *fc)

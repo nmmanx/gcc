@@ -29,14 +29,23 @@
 #include "unwind-cxx.h"
 #include <bits/exception_defines.h>
 
-extern "C" void
+// RATIONALE: adding __attribute__((weak)) to these functions allows redefining
+// them if compiling without exceptions to avoid pulling in exception support
+// and save code size
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
+
+extern "C" void AW
 __cxxabiv1::__cxa_bad_cast ()
 { _GLIBCXX_THROW_OR_ABORT(std::bad_cast()); }
 
-extern "C" void
+extern "C" void AW
 __cxxabiv1::__cxa_bad_typeid ()
 { _GLIBCXX_THROW_OR_ABORT(std::bad_typeid()); }
 
-extern "C" void
+extern "C" void AW
 __cxxabiv1::__cxa_throw_bad_array_new_length ()
 { _GLIBCXX_THROW_OR_ABORT(std::bad_array_new_length()); }

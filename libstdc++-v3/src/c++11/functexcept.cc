@@ -35,6 +35,15 @@
 # define _(msgid)   (msgid)
 #endif
 
+// RATIONALE: adding __attribute__((weak)) to these functions allows redefining
+// them if compiling without exceptions to avoid pulling in exception support
+// and save code size
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
+
 namespace __gnu_cxx
 {
   int __snprintf_lite(char *__buf, size_t __bufsize, const char *__fmt,
@@ -45,45 +54,46 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-  void
+  void AW
   __throw_bad_exception()
   { _GLIBCXX_THROW_OR_ABORT(bad_exception()); }
 
-  void
+  void AW
   __throw_bad_alloc()
   { _GLIBCXX_THROW_OR_ABORT(bad_alloc()); }
 
-  void
+  void AW
   __throw_bad_cast()
   { _GLIBCXX_THROW_OR_ABORT(bad_cast()); }
 
-  void
+  void AW
   __throw_bad_typeid()
   { _GLIBCXX_THROW_OR_ABORT(bad_typeid()); }
 
-  void
+  void AW
   __throw_logic_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(logic_error(_(__s))); }
 
-  void
+  void AW
   __throw_domain_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(domain_error(_(__s))); }
 
-  void
+  void AW
   __throw_invalid_argument(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(invalid_argument(_(__s))); }
 
-  void
+  void AW
   __throw_length_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(length_error(_(__s))); }
 
-  void
+  void AW
   __throw_out_of_range(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(out_of_range(_(__s))); }
 
-  void
+  void AW
   __throw_out_of_range_fmt(const char* __fmt, ...)
   {
+    #ifndef _MIOSIX
     const size_t __len = __builtin_strlen(__fmt);
     // We expect at most 2 numbers, and 1 short string. The additional
     // 512 bytes should provide more than enough space for expansion.
@@ -95,21 +105,31 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __gnu_cxx::__snprintf_lite(__s, __alloca_size, __fmt, __ap);
     _GLIBCXX_THROW_OR_ABORT(out_of_range(_(__s)));
     va_end(__ap);  // Not reached.
+    #else
+    // Miosix applications usually run with tiny stacks of a few KB, doing an
+    // alloca of 512+ bytes is almost guaranteed to cause stack overflow.
+    // The fact that this allocation happens if an exception is thrown (which
+    // should normally not occur) only makes testing and sizing stacks harder.
+    // For this reason, even if it is a nice feature, we've decided to not
+    // expand formats. Users will get a strange exception with %zu or other
+    // format strings in it, but at least no stack overflow.
+    _GLIBCXX_THROW_OR_ABORT(out_of_range(_(__fmt)));
+    #endif
   }
 
-  void
+  void AW
   __throw_runtime_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(runtime_error(_(__s))); }
 
-  void
+  void AW
   __throw_range_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(range_error(_(__s))); }
 
-  void
+  void AW
   __throw_overflow_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(overflow_error(_(__s))); }
 
-  void
+  void AW
   __throw_underflow_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(underflow_error(_(__s))); }
 

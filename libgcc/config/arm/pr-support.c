@@ -376,7 +376,14 @@ _Unwind_GetLanguageSpecificData (_Unwind_Context * context)
 _Unwind_Ptr
 _Unwind_GetDataRelBase (_Unwind_Context *context __attribute__ ((unused)))
 {
-  abort ();
+//TODO: #ifdef _MIOSIX does not work in this context
+//Support exception unwinding that work with Miosix processes
+//see processes-patch.md, section "The problem with unwinding exception tables"
+//NOTE: this code gets linked (even though it never gets used) also in the kernel,
+//so the symbol name we coose here must also exist in the kernel linker scripts
+  extern char _data asm("_data"); //defined in the linker script
+  return &_data;
+//   abort ();
 }
 
 _Unwind_Ptr

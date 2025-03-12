@@ -57,6 +57,12 @@ extern "C" {
 #elif defined(__symbian__) || defined(__uClinux__)
 #define _GLIBCXX_OVERRIDE_TTYPE_ENCODING (DW_EH_PE_absptr)
       /* Absolute pointer.  Nothing more to do.  */
+#elif defined(_MIOSIX)
+     //DO NOT DEFINE _GLIBCXX_OVERRIDE_TTYPE_ENCODING, we don't want that kludge
+     //as the encoding could be either pc-relative (kernel) or data-relative (processes)
+     //see processes-patch.md
+     //This relies on base_of_encoded_value() setting base to 0 for DW_EH_PE_pcrel
+     tmp += base ? base : ptr;
 #else
 #define _GLIBCXX_OVERRIDE_TTYPE_ENCODING (DW_EH_PE_pcrel)
       /* Pc-relative pointer.  */

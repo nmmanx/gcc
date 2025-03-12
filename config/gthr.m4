@@ -14,6 +14,7 @@ case $1 in
     aix)	thread_header=config/rs6000/gthr-aix.h ;;
     dce)	thread_header=config/pa/gthr-dce.h ;;
     lynx)	thread_header=config/gthr-lynx.h ;;
+    miosix)	thread_header=config/gthr-miosix.h ;;
     mipssde)	thread_header=config/mips/gthr-mipssde.h ;;
     posix)	thread_header=gthr-posix.h ;;
     rtems)	thread_header=config/gthr-rtems.h ;;

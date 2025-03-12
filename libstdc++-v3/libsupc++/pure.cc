@@ -43,14 +43,23 @@
 # define writestr(str) /* Empty */
 #endif
 
-extern "C" void
+// RATIONALE: adding __attribute__((weak)) to these functions allows redefining
+// them if compiling without exceptions to avoid pulling in exception support
+// and save code size
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
+
+extern "C" void AW
 __cxxabiv1::__cxa_pure_virtual (void)
 {
   writestr ("pure virtual method called\n");
   std::terminate ();
 }
 
-extern "C" void
+extern "C" void AW
 __cxxabiv1::__cxa_deleted_virtual (void)
 {
   writestr ("deleted virtual method called\n");

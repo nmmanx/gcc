@@ -50,6 +50,11 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
+  // Patch rationale: _M_start_thread needs this
+#ifdef _MIOSIX
+  extern "C" void* execute_native_thread_routine(void* __p);
+#endif
+
   /**
    * @defgroup threads Threads
    * @ingroup concurrency
@@ -83,6 +88,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       explicit
       id(native_handle_type __id) : _M_thread(__id) { }
+      
+      // Patch rationale: join() and detach() patches need this
+#ifdef _MIOSIX
+      native_handle_type _M_get() const noexcept { return _M_thread; }
+#endif
 
     private:
       friend class thread;
@@ -162,11 +172,42 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     joinable() const noexcept
     { return !(_M_id == id()); }
 
+#ifndef _MIOSIX
     void
     join();
 
     void
     detach();
+#else
+    //Patch rationale: compiling these in libstdc++.a pulls in exceptions
+    void
+    join()
+    {
+      int __e = EINVAL;
+
+      if (_M_id._M_get() != id()._M_get())
+        __e = __gthread_join(_M_id._M_thread, 0);
+
+      if (__e)
+        __throw_system_error(__e);
+
+      _M_id = id();
+    }
+
+    void
+    detach()
+    {
+      int __e = EINVAL;
+
+      if (_M_id._M_get() != id()._M_get())
+        __e = __gthread_detach(_M_id._M_thread);
+
+      if (__e)
+        __throw_system_error(__e);
+
+      _M_id = id();
+  }
+#endif
 
     thread::id
     get_id() const noexcept
@@ -195,8 +236,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_run() { _M_func(); }
       };
 
+#ifndef _MIOSIX
     void
     _M_start_thread(_State_ptr, void (*)());
+#else
+    //Patch rationale: compiling this in libstdc++.a pulls in exceptions
+    void
+    _M_start_thread(_State_ptr state, void (*)())
+    {
+      const int err = __gthread_create(&_M_id._M_thread,
+				       &execute_native_thread_routine,
+				       state.get());
+      if (err)
+        __throw_system_error(err);
+      state.release();
+    }
+#endif
 
     template<typename _Callable>
       static _State_ptr
@@ -375,8 +430,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    static_cast<std::time_t>(__s.count()),
 	    static_cast<long>(__ns.count())
 	  };
+	  //Patch rationale: use Miosix preferred sleep function
+#ifdef _MIOSIX
+	while (::clock_nanosleep(CLOCK_MONOTONIC, 0, &__ts, &__ts) == -1 && errno == EINTR)
+	  { }
+#else //_MIOISX
 	while (::nanosleep(&__ts, &__ts) == -1 && errno == EINTR)
 	  { }
+#endif //_MIOSIX
 #else
 	__sleep_for(__s, __ns);
 #endif
@@ -387,6 +448,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       inline void
       sleep_until(const chrono::time_point<_Clock, _Duration>& __atime)
       {
+	  //Patch rationale: do not add skew by converting absolute sleep to relative
+#ifdef _MIOSIX
+	auto __rtime = __atime.time_since_epoch();
+	auto __s = chrono::duration_cast<chrono::seconds>(__rtime);
+	auto __ns = chrono::duration_cast<chrono::nanoseconds>(__rtime - __s);
+	__gthread_time_t __ts =
+	  {
+	    static_cast<std::time_t>(__s.count()),
+	    static_cast<long>(__ns.count())
+	  };
+	clockid_t __clk = _Clock::is_steady ? CLOCK_MONOTONIC : CLOCK_REALTIME;
+	while (::clock_nanosleep(__clk, TIMER_ABSTIME, &__ts, &__ts) == -1 && errno == EINTR)
+	  { }
+#else //_MIOSIX
 	auto __now = _Clock::now();
 	if (_Clock::is_steady)
 	  {
@@ -399,6 +474,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    sleep_for(__atime - __now);
 	    __now = _Clock::now();
 	  }
+#endif //_MIOSIX
       }
   }
 

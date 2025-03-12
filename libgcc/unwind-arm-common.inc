@@ -46,14 +46,18 @@ enum __cxa_type_match_result
     ctm_succeeded_with_ptr_to_base = 2
   };
 
-void __attribute__((weak)) __cxa_call_unexpected(_Unwind_Control_Block *ucbp);
-bool __attribute__((weak)) __cxa_begin_cleanup(_Unwind_Control_Block *ucbp);
-enum __cxa_type_match_result __attribute__((weak)) __cxa_type_match
+// Also declaring function prototypes weak seems to trigger the generation of
+// R_ARM_REL32. This only happens with a test program that does not throw
+// exceptions such as a main.cpp with just a printf() compiled without
+// -fno-exceptions for now, we'll just remove weak
+void /*__attribute__((weak))*/ __cxa_call_unexpected(_Unwind_Control_Block *ucbp);
+bool /*__attribute__((weak))*/ __cxa_begin_cleanup(_Unwind_Control_Block *ucbp);
+enum __cxa_type_match_result /*__attribute__((weak))*/ __cxa_type_match
   (_Unwind_Control_Block *ucbp, const type_info *rttip,
    bool is_reference, void **matched_object);
 
-_Unwind_Ptr __attribute__((weak))
-__gnu_Unwind_Find_exidx (_Unwind_Ptr, int *);
+//_Unwind_Ptr __attribute__((weak))
+//__gnu_Unwind_Find_exidx (_Unwind_Ptr, int *);
 
 #define EXIDX_CANTUNWIND 1
 #define uint32_highbit (((_uw) 1) << 31)
@@ -205,7 +209,15 @@ get_eit_entry (_Unwind_Control_Block *ucbp, _uw return_address)
      instruction itself.  */
   return_address -= 2;
 
-  if (__gnu_Unwind_Find_exidx)
+  //TODO: #ifdef _MIOSIX does not work in this context
+  /*
+   * Apparently checking the address of a weak symbol does not work in Miosix
+   * processes, as we get
+   * libgcc.a(unwind-arm.o): relocation R_ARM_REL32 against external or undefined symbol `__gnu_Unwind_Find_exidx' can not be used when making a PIE executable; recompile with -fPIC
+   * unwind-arm-common.inc:237:(.text+0x138): dangerous relocation: unsupported relocation
+   * Since in Miosix we have __exidx_start|end, just remove this code
+   */
+  /*if (__gnu_Unwind_Find_exidx)
     {
       eitp = (const __EIT_entry *) __gnu_Unwind_Find_exidx (return_address,
 							    &nrec);
@@ -216,10 +228,10 @@ get_eit_entry (_Unwind_Control_Block *ucbp, _uw return_address)
 	}
     }
   else
-    {
+    {*/
       eitp = &__exidx_start;
       nrec = &__exidx_end - &__exidx_start;
-    }
+    //}
 
   eitp = search_EIT_table (eitp, nrec, return_address);
 

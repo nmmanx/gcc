@@ -22,8 +22,12 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-
+// Patch rationale: don't need to be ABI backwards compatible, and
+// on top of that the compat code pulls in exceptions when compiling Miosix with
+// exceptions disabled.
+#ifndef _MIOSIX
 #define _GLIBCXX_THREAD_ABI_COMPAT 1
+#endif //_MIOSIX
 #include <thread>
 #include <system_error>
 #include <cerrno>
@@ -73,7 +77,16 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
   extern "C"
   {
+    /*
+     * Patch rationale: the need to call the class destructor makes it
+     * call __cxa_end_cleanup which pulls in exception code. Thus, reimplemented
+     * in Miosix when compiling without exceptions.
+     */
+#ifdef _MIOSIX
+    void* __attribute__((weak))
+#else
     static void*
+#endif
     execute_native_thread_routine(void* __p)
     {
       thread::_State_ptr __t{ static_cast<thread::_State*>(__p) };
@@ -101,6 +114,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   thread::_State::~_State() = default;
 
+  //Patch rationale: compiling these in libstdc++.a pulls in exceptions
+  //This patch works together with the one in include/std/thread
+#ifndef _MIOSIX
   void
   thread::join()
   {
@@ -139,6 +155,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __throw_system_error(err);
     state.release();
   }
+#endif
 
 #if _GLIBCXX_THREAD_ABI_COMPAT
   void

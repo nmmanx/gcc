@@ -31,12 +31,32 @@
 #include <cxxabi.h>
 # include <cstdio>
 
+#include <unistd.h>
+
 using namespace std;
 using namespace abi;
+
+// RATIONALE: add __attribute__((weak)) to make __verbose_terminate_handler
+// overridable to save the code size of __cxa_demangle
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
 
 namespace __gnu_cxx
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+  // XXX: having trouble overriding weak functions in Miosix processes,
+  // and this function is increasing code size significantly, replacing it
+  void AW __verbose_terminate_handler()
+  {
+      write(1,"terminate called\n",17);
+      _exit(1);
+  }
+  
+#if 0
 
   // A replacement for the standard terminate_handler which prints
   // more information about the terminating exception (if any) on
@@ -94,6 +114,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     
     abort();
   }
+
+#endif
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

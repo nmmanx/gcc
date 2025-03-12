@@ -41,6 +41,11 @@ extern "C" void free(void *);
 
 using namespace __cxxabiv1;
 
+// RATIONALE: __cxa_get_globals() and __cxa_get_globals_fast() have been made
+// Miosix syscalls since the __cxa_eh_globals struct needs to be provided on
+// a per-thread basis but Miosix does not support TLS
+#ifndef _MIOSIX
+
 #if _GLIBCXX_HAVE_TLS
 
 namespace
@@ -157,3 +162,5 @@ __cxxabiv1::__cxa_get_globals() _GLIBCXX_NOTHROW
 #endif
 
 #endif
+
+#endif //_MIOSIX

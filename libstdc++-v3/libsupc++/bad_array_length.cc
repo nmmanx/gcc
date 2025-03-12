@@ -48,9 +48,18 @@ bad_array_length::what() const _GLIBCXX_USE_NOEXCEPT
 
 } // namespace std
 
+// RATIONALE: adding __attribute__((weak)) to these functions allows redefining
+// them if compiling without exceptions to avoid pulling in exception support
+// and save code size
+#ifdef _MIOSIX
+#define AW __attribute__((weak))
+#else
+#define AW
+#endif
+
 namespace __cxxabiv1 {
 
-extern "C" void
+extern "C" void AW
 __cxa_throw_bad_array_length ()
 { _GLIBCXX_THROW_OR_ABORT(std::bad_array_length()); }
 

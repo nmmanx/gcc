@@ -6538,43 +6538,81 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   { return __gnu_cxx::__stoa(&std::strtold, "stold", __str.c_str(), __idx); }
 #endif // _GLIBCXX_USE_C99_STDLIB
 
+//
+// Patch rationale: use newlib-specific version of vsnprintf to save code size
+//
+
 #if _GLIBCXX_USE_C99_STDIO
   // NB: (v)snprintf vs sprintf.
 
   // DR 1261.
   inline string
   to_string(int __val)
+#ifndef _MIOSIX
   { return __gnu_cxx::__to_xstring<string>(&std::vsnprintf, 4 * sizeof(int),
 					   "%d", __val); }
+#else
+  { return __gnu_cxx::__to_xstring<string>(&vsniprintf, 4 * sizeof(int),
+					   "%d", __val); }
+#endif
 
   inline string
   to_string(unsigned __val)
+#ifndef _MIOSIX
   { return __gnu_cxx::__to_xstring<string>(&std::vsnprintf,
 					   4 * sizeof(unsigned),
 					   "%u", __val); }
+#else
+  { return __gnu_cxx::__to_xstring<string>(&vsniprintf,
+					   4 * sizeof(unsigned),
+					   "%u", __val); }
+#endif
 
   inline string
   to_string(long __val)
+#ifndef _MIOSIX
   { return __gnu_cxx::__to_xstring<string>(&std::vsnprintf, 4 * sizeof(long),
 					   "%ld", __val); }
+#else
+  { return __gnu_cxx::__to_xstring<string>(&vsniprintf, 4 * sizeof(long),
+					   "%ld", __val); }
+#endif
 
   inline string
   to_string(unsigned long __val)
+#ifndef _MIOSIX
   { return __gnu_cxx::__to_xstring<string>(&std::vsnprintf,
 					   4 * sizeof(unsigned long),
 					   "%lu", __val); }
+#else
+  { return __gnu_cxx::__to_xstring<string>(&vsniprintf,
+					   4 * sizeof(unsigned long),
+					   "%lu", __val); }
+#endif
 
   inline string
   to_string(long long __val)
+#ifndef _MIOSIX
   { return __gnu_cxx::__to_xstring<string>(&std::vsnprintf,
 					   4 * sizeof(long long),
 					   "%lld", __val); }
+#else
+  { return __gnu_cxx::__to_xstring<string>(&vsniprintf,
+					   4 * sizeof(long long),
+					   "%lld", __val); }
+#endif
 
   inline string
   to_string(unsigned long long __val)
+#ifndef _MIOSIX
   { return __gnu_cxx::__to_xstring<string>(&std::vsnprintf,
 					   4 * sizeof(unsigned long long),
 					   "%llu", __val); }
+#else
+  { return __gnu_cxx::__to_xstring<string>(&vsniprintf,
+					   4 * sizeof(unsigned long long),
+					   "%llu", __val); }
+#endif
 
   inline string
   to_string(float __val)

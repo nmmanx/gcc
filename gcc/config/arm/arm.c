@@ -70,9 +70,19 @@
 #include "gimplify.h"
 #include "gimple.h"
 #include "selftest.h"
+#include "print-tree.h"
+#include <assert.h>
 
 /* This file should be included last.  */
 #include "target-def.h"
+
+/*
+ * https://gcc.gnu.org/legacy-ml/gcc/2017-05/msg00073.html
+ * Disable this warning at the compiler level, as Miosix skipped from GCC 4.7.3
+ * to GCC 9.2.0, so there's no affected code around.
+ */
+#undef warn_psabi /* in case it's already a macro */
+#define warn_psabi 0
 
 /* Forward definitions of types.  */
 typedef struct minipool_node    Mnode;
@@ -2758,8 +2768,30 @@ arm_init_libfuncs (void)
 	}
   }
 
-  if (TARGET_AAPCS_BASED)
-    synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
+  //Rationale:
+  //Compiling code that instantiates C++ static objects on architectures that do
+  //not have memory fence/barrier instructions (e.g: ARM7TDMI) causes undefined
+  //reference to `__sync_synchronize'.
+  //expand_mem_thread_fence() in gcc/optabs.c:6489 tries to emit ASM insn
+  //and failing that, emits the __sync_synchronize call if available.
+  //Synchronize_libfunc is used only in optabs.c and defined only for ARM/MIPS
+  //$ grep -R 'synchronize_libfunc' gcc-9.2.0
+  //libfuncs.h:79:#define synchronize_libfunc    (libfunc_table[LTI_synchronize])
+  //config/arm/arm.c:2776:    synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
+  //config/mips/mips.c:13535:      synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
+  //optabs.c:6500:  else if (synchronize_libfunc != NULL_RTX)
+  //optabs.c:6501:    emit_library_call (synchronize_libfunc, LCT_NORMAL, VOIDmode);
+  //$ grep -Rn 'LTI_synchronize' gcc-9.2.0
+  //libfuncs.h:29:  LTI_synchronize,
+  //libfuncs.h:79:#define synchronize_libfunc (libfunc_table[LTI_synchronize])
+  //The ARM implementation is in libgcc and only exists for linux and bsd.
+  //
+  //Solution: remove given ARM7TDMI don't need hardware memory barriers at all.
+  //
+  //When updating patches to new compiler, check that cortex-M targets have
+  //dmb instructions, while ARM7TDMI code has no calls to __sync_synchronize.
+  //if (TARGET_AAPCS_BASED)
+  //  synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
 
   speculation_barrier_libfunc = init_one_libfunc ("__speculation_barrier");
 }
@@ -7501,6 +7533,157 @@ require_pic_register (rtx pic_reg, bool compute_now)
     }
 }
 
+//TODO: #ifdef _MIOSIX does not work in this context
+
+//Taken from varasm.c, it is static unfortunately, hence the copy-paste
+static int
+contains_pointers_p (const_tree type)
+{
+  switch (TREE_CODE (type))
+    {
+    case POINTER_TYPE:
+    case REFERENCE_TYPE:
+      /* I'm not sure whether OFFSET_TYPE needs this treatment,
+	 so I'll play safe and return 1.  */
+    case OFFSET_TYPE:
+      return 1;
+
+    case RECORD_TYPE:
+    case UNION_TYPE:
+    case QUAL_UNION_TYPE:
+      {
+	tree fields;
+	/* For a type that has fields, see if the fields have pointers.  */
+	for (fields = TYPE_FIELDS (type); fields; fields = DECL_CHAIN (fields))
+	  if (TREE_CODE (fields) == FIELD_DECL
+	      && contains_pointers_p (TREE_TYPE (fields)))
+	    return 1;
+	return 0;
+      }
+
+    case ARRAY_TYPE:
+      /* An array type contains pointers if its element type does.  */
+      return contains_pointers_p (TREE_TYPE (type));
+
+    default:
+      return 0;
+    }
+}
+
+/*
+ * Miosix processes do not live in a virtual address space.
+ * Their code and constants (.text and .rodata) live in FLASH at an address
+ * that is not known until runtime, so PC-relative addressing must be used.
+ * Their variables (.data and .bss) live in RAM, and the offset between
+ * .text and RAM is not constant, so the GOT must be used with single-pic-base.
+ * This function takes a memory reference and returns true if PC-relative
+ * addressing must be used, or false if the GOT must be used.
+ */
+static bool miosix_processes_ref_demux(rtx orig)
+{
+    // This logic has been kept from the original code in legitimize_pic_address
+    if(GET_CODE(orig) == LABEL_REF) return true;
+    
+    // From here on we handle the SYMBOL_REF case
+    //TODO: we don't do anything for DECL_WEAK
+
+    // Dump data structures for debugging purpose
+    // print-rtl.c and print-tree.c are very useful for knowing how they work
+    //debug_rtx(orig);
+    //if(SYMBOL_REF_DECL(orig)) debug_tree(SYMBOL_REF_DECL(orig));
+    
+    bool result = false;
+    const_tree decl = SYMBOL_REF_DECL(orig);
+    if(decl)
+    {
+        if(TREE_CODE(decl) == FUNCTION_DECL)
+        {
+            /*
+             * Taking function address, testcase (compile with -O2)
+             * void f();
+             * typedef void (*fp)();
+             * fp get() { return &f; }
+             */
+            result = true;
+            //printf("constant (FUNCTION_DECL)\n\n");
+        } else if(TREE_CODE(decl) == VAR_DECL) {
+            const_tree type = TREE_TYPE(decl);
+            assert(type != NULL && "Miosix: SYMBOL_REF of unknown constness (type==0)");
+            if(contains_pointers_p(type))
+            {
+                /*
+                 * A true constant pointer can't exist in Miosix processes.
+                 * If it's a constant, the pointer would need to be
+                 * initialized at the definition site, and since it may
+                 * point to a variable in RAM, a runtime relocation is
+                 * needed to initialize it, and because of that it can't
+                 * stay in .rodata among the true constants.
+                 * Const pointers without relocations may exist, say for
+                 * instance int *const p=0; and those *could* stay in .rodata
+                 * but that creates another problem: how do we know from
+                 * the declaration only (extern int *const p;) whether the
+                 * pointer is in .rodata or not? We can't and thus we don't
+                 * know whether to use pc-relative or GOT addressing, so
+                 * we treat *all* const pointers as non const.
+                 */
+                //printf("variable (contains pointers)\n\n");
+            } else if(decl_readonly_section(decl,0)) {
+                /*
+                 * Non-extern consts in non optimized code, testcase (compile with -O0)
+                 * const char str[]="Hello world\n";
+                 * const char *get() { return str; }
+                 */
+                result = true;
+                //printf("constant (decl_readonly_section)\n\n");
+                // remaining if are because decl_readonly_section misses some
+                // const cases
+            } else if(TYPE_READONLY(type)) {
+                /*
+                 * Extern const, testcase (compile with -O2)
+                 * extern const int aRodata;
+                 * int get() { return aRodata; }
+                 */
+                result = true;
+                //printf("constant (TYPE_READONLY)\n\n");
+            } else {
+                /*
+                 * Variables, testcase (compile with -O2)
+                 * extern int aData;
+                 * int get() { return aData; }
+                 */
+                //printf("variable (decl!=0)\n\n");
+            }
+        } else assert(0 && "Miosix: SYMBOL_REF of unknown constness (TREE_CODE?)");
+    } else {
+        //we fall here when optimizations are enabled and sometimes decl==NULL
+        
+        //NOTE: SYMBOL_REF_BLOCK() is valid only if SYMBOL_REF_HAS_BLOCK_INFO_P()
+        if(!SYMBOL_REF_HAS_BLOCK_INFO_P(orig) || SYMBOL_REF_BLOCK(orig) == NULL)
+            assert(0 && "Miosix: SYMBOL_REF of unknown constness (decl==0)");
+        
+        //TODO: output.h defines a few default sections as global variables
+        //do we need to handle more than readonly_data_section?
+        if(SYMBOL_REF_BLOCK(orig)->sect == readonly_data_section)
+        {
+            /*
+             * Non-folded constants when optimizing, testcase (compile with -O2)
+             * const int aRodata2=42;
+             * const int *get() { return &aRodata2; }
+             */
+            result = true;
+            //printf("constant (sect==readonly)\n\n");
+        } else {
+            /* Defined (not just declared) vars when optimizing, testcase (compile with -O2)
+             * int aData=1;
+             * int get() { return aData; }
+             */
+            //printf("variable (decl==0)\n\n");
+        }
+    }
+
+    return result;
+}
+
 /* Legitimize PIC load to ORIG into REG.  If REG is NULL, a new pseudo is
    created to hold the result of the load.  If not NULL, PIC_REG indicates
    which register to use as PIC register, otherwise it is decided by register
@@ -7526,6 +7709,8 @@ legitimize_pic_address (rtx orig, machine_mode mode, rtx reg, rtx pic_reg,
 	  reg = gen_reg_rtx (Pmode);
 	}
 
+    bool miosix_ref_demux = miosix_processes_ref_demux(orig);
+
       /* VxWorks does not impose a fixed gap between segments; the run-time
 	 gap can be different from the object-file gap.  We therefore can't
 	 use GOTOFF unless we are absolutely sure that the symbol is in the
@@ -7535,13 +7720,7 @@ legitimize_pic_address (rtx orig, machine_mode mode, rtx reg, rtx pic_reg,
       /* References to weak symbols cannot be resolved locally: they
 	 may be overridden by a non-weak definition at link time.  */
       rtx_insn *insn;
-      if ((GET_CODE (orig) == LABEL_REF
-	   || (GET_CODE (orig) == SYMBOL_REF
-	       && SYMBOL_REF_LOCAL_P (orig)
-	       && (SYMBOL_REF_DECL (orig)
-		   ? !DECL_WEAK (SYMBOL_REF_DECL (orig)) : 1)))
-	  && NEED_GOT_RELOC
-	  && arm_pic_data_is_text_relative)
+    if (miosix_ref_demux && NEED_GOT_RELOC && arm_pic_data_is_text_relative)
 	insn = arm_pic_static_addr (orig, reg);
       else
 	{
@@ -23064,14 +23243,24 @@ arm_assemble_integer (rtx x, unsigned int size, int aligned_p)
 	  /* References to weak symbols cannot be resolved locally:
 	     they may be overridden by a non-weak definition at link
 	     time.  */
-	  if (!arm_pic_data_is_text_relative
-	      || (GET_CODE (x) == SYMBOL_REF
-		  && (!SYMBOL_REF_LOCAL_P (x)
-		      || (SYMBOL_REF_DECL (x)
-			  ? DECL_WEAK (SYMBOL_REF_DECL (x)) : 0))))
+      
+      /*
+       * NOTE: On Miosix processes GOTOFF can't work, as we don't know at
+       * time the offset between .text and .got/.data/whatever is in RAM
+       * so always use GOT.
+       * Without this patch a process with something as simple as
+       * int *ptr = { 0 };
+       * int *get() { return ptr; }
+       * uses GOTOFF and produces segfaults upon calling get()
+       */
+// 	  if (!arm_pic_data_is_text_relative
+// 	      || (GET_CODE (x) == SYMBOL_REF
+// 		  && (!SYMBOL_REF_LOCAL_P (x)
+// 		      || (SYMBOL_REF_DECL (x)
+// 			  ? DECL_WEAK (SYMBOL_REF_DECL (x)) : 0))))
 	    fputs ("(GOT)", asm_out_file);
-	  else
-	    fputs ("(GOTOFF)", asm_out_file);
+// 	  else
+// 	    fputs ("(GOTOFF)", asm_out_file);
 	}
       fputc ('\n', asm_out_file);
       return true;

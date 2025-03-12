@@ -1596,6 +1596,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __in;
     }
 
+/*
+ * Disabling instantiation of std::string from user code forces the use of
+ * the instantiation in string-inst.cc which may reduce compile
+ * times but it hardcodes that C++ exceptions are enabled causing code bloat, as
+ * arm-miosix-eabi-objdump -t string-inst.o | grep '\*UND\*.*__cxa'
+ * shows.
+ */
+#ifndef _MIOSIX
+    
   // Inhibit implicit instantiations for required instantiations,
   // which are defined via explicit instantiations elsewhere.
 #if _GLIBCXX_EXTERN_TEMPLATE
@@ -1648,6 +1657,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     getline(basic_istream<wchar_t>&, wstring&);
 #endif // _GLIBCXX_USE_WCHAR_T
 #endif // _GLIBCXX_EXTERN_TEMPLATE
+
+#endif //_MIOSIX
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std

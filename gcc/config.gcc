@@ -1218,6 +1218,13 @@ arm*-*-eabi* | arm*-*-symbianelf* | arm*-*-rtems* | arm*-*-fuchsia*)
 	tmake_file="${tmake_file} arm/t-arm arm/t-arm-elf"
 	target_cpu_cname="arm7tdmi"
 	case ${target} in
+	arm*-miosix-eabi*)
+	  # Copy options from arm*-*-eabi*, add the miosix-specific ones
+	  # and make sure arm/t-arm-elf is not added to tmake_file
+	  tm_file="${tm_file} newlib-stdint.h arm/miosix-eabi.h"  # Append
+	  tmake_file="arm/t-arm arm/t-arm-miosix arm/t-bpabi"     # Replace
+	  use_gcc_stdint=wrap
+	  ;;
 	arm*-*-eabi*)
 	  tm_file="$tm_file newlib-stdint.h"
 	  tmake_file="${tmake_file} arm/t-bpabi"

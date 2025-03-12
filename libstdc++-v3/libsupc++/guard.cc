@@ -190,6 +190,11 @@ __set_and_release (__cxxabiv1::__guard *g)
 //  | _GLIBCXX_GUARD_WAITING_BIT) and some other threads are waiting until
 //				  it is initialized.
 
+// RATIONALE: __cxa_guard_[acquire|release|abort] have been made Miosix syscalls
+// as static object initialization can occur also before the kernel is started,
+// therefore at a time when using pthread_mutexe and pthread_cond is unsafe.
+#ifndef _MIOSIX
+
 namespace __cxxabiv1 
 {
 #ifdef _GLIBCXX_USE_FUTEX
@@ -425,3 +430,5 @@ namespace __cxxabiv1
 #endif
   }
 }
+
+#endif //_MIOSIX

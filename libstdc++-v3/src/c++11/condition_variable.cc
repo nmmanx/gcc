@@ -31,6 +31,16 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
+/*
+ * Patch rationale: this file is compiled when libstdc++ is built, with
+ * exceptions enabled. When Miosix is compiled with exceptions disabled and
+ * these are used, they cause some of the exception support to be pulled in
+ * increasing code size. These are also so simple that inlining them will
+ * make condition_variable faster. A win-win.
+ * This patch works together with the one in include/std/condition_variable
+ */
+#ifndef _MIOSIX
+
 #ifdef __GTHREAD_COND_INIT
   condition_variable::condition_variable() noexcept = default;
 #else
@@ -77,6 +87,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     if (__e)
       __throw_system_error(__e);
   }
+
+#endif //_MIOSIX
 
   extern void
   __at_thread_exit(__at_thread_exit_elt*);

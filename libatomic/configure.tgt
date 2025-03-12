@@ -154,6 +154,10 @@ case "${target}" in
         esac
 	;;
 
+  arm*-miosix-eabi*)
+	config_path="miosix"
+	;;
+
   *-*-rtems*)
 	XCFLAGS="${configure_tgt_pre_target_cpu_XCFLAGS}"
 	config_path="rtems"
